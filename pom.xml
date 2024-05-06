@@ -31,7 +31,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.4</version>
                 <configuration>
-                    <mainClass>com.mycompany.magazzino.App</mainClass>
+                    <mainClass>com.mycompany.magazzino.MagazzinoApp</mainClass>
                 </configuration>
                 <executions>
                     <execution>
