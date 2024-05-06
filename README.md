@@ -1,0 +1,2 @@
+# magazzino
+Progetto Java FX
