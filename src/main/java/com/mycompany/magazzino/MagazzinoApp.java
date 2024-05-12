@@ -21,6 +21,7 @@ import java.util.Comparator;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.HBox;
 import javafx.geometry.Insets;
+import javafx.scene.Node;
 
 
 public class MagazzinoApp extends Application {
@@ -30,6 +31,9 @@ public class MagazzinoApp extends Application {
     private TableView<Movimento> tableViewMovimenti;
     private ObservableList<Articolo> articoli = FXCollections.observableArrayList();
     private ObservableList<Movimento> movimenti = FXCollections.observableArrayList();
+    private Articolo ultimoArticoloModificato;
+    private HBox buttonsRow;
+
 
     public static void main(String[] args) {
         launch(args);
@@ -61,6 +65,23 @@ public class MagazzinoApp extends Application {
 
         TableColumn<Articolo, String> unitaCol = new TableColumn<>("Unità di misura");
         unitaCol.setCellValueFactory(cellData -> cellData.getValue().unitaMisuraProperty());
+        
+        tableViewMagazzino.setRowFactory(tv -> new TableRow<Articolo>() {
+            @Override
+            protected void updateItem(Articolo item, boolean empty) {
+                super.updateItem(item, empty);
+                getChildren().stream().filter(node -> node instanceof TableCell).forEach(cell -> {
+                    TableCell<?, ?> tableCell = (TableCell<?, ?>) cell;
+                    if (item != null && item.equals(ultimoArticoloModificato) && !empty) {
+                        tableCell.setStyle("-fx-background-color: yellow; -fx-text-fill: black;");
+                    } else {
+                        tableCell.setStyle("");
+                    }
+                });
+            }
+        });
+
+
 
         tableViewMagazzino.getColumns().addAll(codiceCol, quantitaCol, descrizioneCol, prezzoCol, unitaCol);
 
@@ -103,10 +124,10 @@ public class MagazzinoApp extends Application {
 
         Button magazzinoButton = new Button("Magazzino");
         magazzinoButton.setOnAction(event -> mostraContenuto("Magazzino"));
-
+        magazzinoButton.setVisible(false);
         
        // Creazione di un HBox per organizzare i pulsanti in una riga
-    HBox buttonsRow = new HBox(10); // Spaziatura tra i pulsanti
+    buttonsRow = new HBox(10); // Spaziatura tra i pulsanti
     buttonsRow.getChildren().addAll(compraButton, vendiButton, movimentiButton,
             articoliPersiButton, valorizzaButton, magazzinoButton);
 
@@ -160,7 +181,16 @@ public class MagazzinoApp extends Application {
     private void mostraContenuto(String tipoContenuto) {
         VBox contenuto = new VBox();
         Label titolo = new Label();
+        titolo.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+        
+        Label articoloLabel = new Label();
+        Button magazzinoButton = findButtonByName(buttonsRow, "Magazzino");
+        magazzinoButton.setVisible(true);
 
+        Articolo articoloSelezionato = tableViewMagazzino.getSelectionModel().getSelectedItem();
+        if (articoloSelezionato != null) {
+            articoloLabel.setText("Articolo Selezionato: " + articoloSelezionato.getCodice() + " - " + articoloSelezionato.getDescrizione());
+        }
         switch (tipoContenuto) {
             case "Compra":
                 if(!checkRowSelected()) return;
@@ -182,15 +212,28 @@ public class MagazzinoApp extends Application {
                 break;
             case "Articoli Persi":
                 titolo.setText("Articoli Persi");
-                // Aggiungi qui il contenuto specifico per l'azione "Articoli Persi"
+                if (!checkRowSelected()) return;
+
+                ComboBox<String> motivoPerdita = new ComboBox<>();
+                motivoPerdita.getItems().addAll("rottamazione", "furto");
+
+                TextField numArticoliTextField = new TextField();
+                numArticoliTextField.setPromptText("Inserisci il numero di articoli persi");
+
+                Button registraPerditaButton = new Button("Registra");
+                registraPerditaButton.setOnAction(event -> gestisciPerditaArticoli(motivoPerdita.getValue(), numArticoliTextField.getText()));
+
+                contenuto.getChildren().addAll(new Label("Seleziona il motivo della perdita:"), motivoPerdita, new Label("Numero di articoli persi:"), numArticoliTextField, registraPerditaButton);
                 break;
+                
             case "Valorizza":
                 titolo.setText("Valorizza");
                 // Aggiungi qui il contenuto specifico per l'azione "Valorizza"
                 break;
             case "Magazzino":
                 titolo.setText("Articoli in magazzino");
-                contenuto.getChildren().addAll(new Label("Articoli in magazzino"), tableViewMagazzino);
+                magazzinoButton.setVisible(false);
+                contenuto.getChildren().addAll(tableViewMagazzino);
                 break;
             default:
                 break;
@@ -198,22 +241,57 @@ public class MagazzinoApp extends Application {
 
         // Aggiungi il titolo e il contenuto alla finestra principale
         contenuto.getChildren().add(0, titolo);
+        contenuto.getChildren().add(1, articoloLabel);
         ((VBox) primaryStage.getScene().getRoot()).getChildren().set(0, contenuto);
     }
 
+    private void gestisciPerditaArticoli(String motivo, String numArticoliPersiText) {
+        if (motivo == null || numArticoliPersiText.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "Errore", "Devi selezionare un motivo e inserire il numero di articoli persi.");
+            return;
+        }
+
+        int numArticoliPersi;
+        try {
+            numArticoliPersi = Integer.parseInt(numArticoliPersiText);
+        } catch (NumberFormatException e) {
+            showAlert(Alert.AlertType.ERROR, "Errore di Formato", "Il numero di articoli deve essere un valore intero.");
+            return;
+        }
+
+        Articolo articoloSelezionato = tableViewMagazzino.getSelectionModel().getSelectedItem();
+        if (articoloSelezionato != null) {
+            articoloSelezionato.setQuantita(articoloSelezionato.getQuantita() - numArticoliPersi);
+            ultimoArticoloModificato = articoloSelezionato;
+            aggiornaFileCSV();  // Assicurati che questo metodo aggiorni correttamente il file CSV del magazzino
+            mostraContenuto("Magazzino");
+        } else {
+            showAlert(Alert.AlertType.WARNING, "Nessun Articolo Selezionato", "Seleziona un articolo dal magazzino!");
+        }
+    }
+
+    private void showAlert(Alert.AlertType alertType, String title, String content) {
+        Alert alert = new Alert(alertType);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+
+    
     private void mostraScenaAcquisto(VBox contenuto, Articolo articolo) {
         contenuto.setPadding(new Insets(20));
 
-        Label articoloLabel = new Label("Articolo: " + articolo.getCodice());
+        Label articoloLabel = new Label(); //"Articolo: " + articolo.getCodice()
         Label quantitaLabel = new Label("Quantità da acquistare:");
         Spinner<Integer> quantitaSpinner = new Spinner<>(1, Integer.MAX_VALUE, 1);
 
         Button acquistaButton = new Button("Acquista");
         acquistaButton.setOnAction(event -> {
             int quantitaAcquistata = quantitaSpinner.getValue();
-            articolo.setQuantita(articolo.getQuantita() + quantitaAcquistata);
-
-            // Aggiorna il file CSV con la nuova quantità
+            Articolo articoloSelezionato = tableViewMagazzino.getSelectionModel().getSelectedItem();
+            articoloSelezionato.setQuantita(articoloSelezionato.getQuantita() + quantitaAcquistata);
+            ultimoArticoloModificato = articoloSelezionato;
             aggiornaFileCSV();
             
             // Registra il movimento
@@ -234,14 +312,16 @@ public class MagazzinoApp extends Application {
     private void mostraScenaVendita(VBox contenuto, Articolo articolo) {
         contenuto.setPadding(new Insets(20));
 
-        Label articoloLabel = new Label("Articolo: " + articolo.getCodice());
+        Label articoloLabel = new Label(); //"Articolo: " + articolo.getCodice()
         Label quantitaLabel = new Label("Quantità da vendere:");
         Spinner<Integer> quantitaSpinner = new Spinner<>(1, Integer.MAX_VALUE, 1);
 
-        Button acquistaButton = new Button("Vendi");
-        acquistaButton.setOnAction(event -> {
+        Button vendiButton = new Button("Vendi");
+        vendiButton.setOnAction(event -> {
             int quantitaVenduta = quantitaSpinner.getValue();
-            articolo.setQuantita(articolo.getQuantita() - quantitaVenduta);
+            Articolo articoloSelezionato = tableViewMagazzino.getSelectionModel().getSelectedItem();
+            articoloSelezionato.setQuantita(articoloSelezionato.getQuantita() - quantitaVenduta);
+            ultimoArticoloModificato = articoloSelezionato;
 
             // Aggiorna il file CSV con la nuova quantità
             aggiornaFileCSV();
@@ -258,7 +338,7 @@ public class MagazzinoApp extends Application {
              mostraContenuto("Magazzino");
         });
 
-        contenuto.getChildren().addAll(articoloLabel, quantitaLabel, quantitaSpinner, acquistaButton);
+        contenuto.getChildren().addAll(articoloLabel, quantitaLabel, quantitaSpinner, vendiButton);
     }
 
     private void aggiornaFileCSV() {
@@ -339,4 +419,13 @@ public class MagazzinoApp extends Application {
         }
     }
 
+    
+    private Button findButtonByName(HBox buttonsRow, String buttonName) {
+        for (Node node : buttonsRow.getChildren()) {
+            if (node instanceof Button && ((Button) node).getText().equals(buttonName)) {
+                return (Button) node;
+            }
+        }
+        return null; // o gestire il caso di non trovato
+    }
 }
