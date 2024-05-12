@@ -1,6 +1,7 @@
 package com.mycompany.magazzino;
 
 import com.mycompany.magazzino.models.Articolo;
+import com.mycompany.magazzino.models.Movimento;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -13,6 +14,8 @@ import java.io.BufferedWriter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.LocalDate;
+import java.util.Comparator;
 import javafx.scene.layout.HBox;
 import javafx.geometry.Insets;
 
@@ -21,8 +24,9 @@ public class MagazzinoApp extends Application {
 
     private Stage primaryStage; // Definizione come membro della classe
     private TableView<Articolo> tableViewMagazzino;
-    private TableView<Articolo> tableViewMovimenti;
+    private TableView<Movimento> tableViewMovimenti;
     private ObservableList<Articolo> articoli = FXCollections.observableArrayList();
+    private ObservableList<Movimento> movimenti = FXCollections.observableArrayList();
 
     public static void main(String[] args) {
         launch(args);
@@ -64,6 +68,26 @@ public class MagazzinoApp extends Application {
         Button vendiButton = new Button("Vendi");
         vendiButton.setOnAction(event -> mostraContenuto("Vendi"));
 
+                tableViewMovimenti = new TableView<>();
+                leggiMovimentiCSV("movimenti.csv");
+
+                TableColumn<Movimento, String> dataCol = new TableColumn<>("Data");
+                dataCol.setCellValueFactory(cellData -> cellData.getValue().dataProperty());
+
+                TableColumn<Movimento, String> articoloCol = new TableColumn<>("Articolo");
+                articoloCol.setCellValueFactory(cellData -> cellData.getValue().articoloProperty());
+
+                TableColumn<Movimento, Number> quantitaCol2 = new TableColumn<>("Quantità");
+                quantitaCol2.setCellValueFactory(cellData -> cellData.getValue().quantitaProperty());
+
+                TableColumn<Movimento, Number> costoCol = new TableColumn<>("Costo");
+                costoCol.setCellValueFactory(cellData -> cellData.getValue().costoProperty());
+
+                TableColumn<Movimento, String> tipoCol = new TableColumn<>("Tipo");
+                tipoCol.setCellValueFactory(cellData -> cellData.getValue().tipoProperty());
+
+                tableViewMovimenti.getColumns().addAll(dataCol, articoloCol, quantitaCol2, costoCol, tipoCol);
+                tableViewMovimenti.setItems(movimenti);
         Button movimentiButton = new Button("Movimenti");
         movimentiButton.setOnAction(event -> mostraContenuto("Movimenti"));
 
@@ -149,7 +173,8 @@ public class MagazzinoApp extends Application {
                 break;
             case "Movimenti":
                 titolo.setText("Movimenti");
-                // Aggiungi qui il contenuto specifico per l'azione "Movimenti"
+                tableViewMovimenti.setItems(FXCollections.observableArrayList(movimenti));
+                contenuto.getChildren().addAll(tableViewMovimenti);
                 break;
             case "Articoli Persi":
                 titolo.setText("Articoli Persi");
@@ -186,6 +211,12 @@ public class MagazzinoApp extends Application {
 
             // Aggiorna il file CSV con la nuova quantità
             aggiornaFileCSV();
+            
+            // Registra il movimento
+            String data = LocalDate.now().toString();
+            double costoTotale = quantitaAcquistata * articolo.getPrezzo();
+            registraMovimento(data, articolo.getCodice(), quantitaAcquistata, costoTotale, "acquisto");
+
 
             // Aggiorna la tabella
             tableViewMagazzino.refresh();
@@ -210,6 +241,12 @@ public class MagazzinoApp extends Application {
 
             // Aggiorna il file CSV con la nuova quantità
             aggiornaFileCSV();
+            
+            // Registra il movimento
+            String data = LocalDate.now().toString();
+            double costoTotale = quantitaVenduta * articolo.getPrezzo();
+            registraMovimento(data, articolo.getCodice(), quantitaVenduta, costoTotale, "vendita");
+
 
             // Aggiorna la tabella
             tableViewMagazzino.refresh();
@@ -253,6 +290,47 @@ public class MagazzinoApp extends Application {
             return false;
         }
         return true;
+    }
+
+    private void leggiMovimentiCSV(String filePath) {
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            br.readLine(); // Salta l'intestazione
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(";");
+                if (parts.length != 5) {
+                    System.err.println("Formato riga CSV non valido: " + line);
+                    continue;
+                }
+                String data = parts[0];
+                String articolo = parts[1];
+                int quantita = Integer.parseInt(parts[2].trim());
+                double costo = Double.parseDouble(parts[3].trim());
+                String tipo = parts[4];
+
+                movimenti.add(new Movimento(data, articolo, quantita, costo, tipo));
+                // Ordina i movimenti per data in ordine discendente
+                movimenti.sort(Comparator.comparing((Movimento m) -> m.dataProperty().get()).reversed());
+            }
+        } catch (IOException e) {
+            System.err.println("Errore durante la lettura del file CSV: " + e.getMessage());
+        }
+    }
+    
+    private void registraMovimento(String data, String articolo, int quantita, double costo, String tipo) {
+        // Aggiunge il movimento alla lista
+        movimenti.add(new Movimento(data, articolo, quantita, costo, tipo));
+        // Ordina nuovamente dopo l'inserimento
+        movimenti.sort(Comparator.comparing((Movimento m) -> m.dataProperty().get()).reversed());
+    
+        // Scrive tutti i movimenti nel file, inclusa la nuova riga
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("movimenti.csv", true))) {
+            writer.write(data + ";" + articolo + ";" + quantita + ";" + costo + ";" + tipo);
+            writer.newLine();
+            System.out.println("Movimento registrato con successo.");
+        } catch (IOException e) {
+            System.err.println("Errore durante l'aggiornamento del file dei movimenti: " + e.getMessage());
+        }
     }
 
 }
