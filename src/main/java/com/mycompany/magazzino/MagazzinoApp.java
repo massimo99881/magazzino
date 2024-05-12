@@ -15,7 +15,10 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.HBox;
 import javafx.geometry.Insets;
 
@@ -72,7 +75,8 @@ public class MagazzinoApp extends Application {
                 leggiMovimentiCSV("movimenti.csv");
 
                 TableColumn<Movimento, String> dataCol = new TableColumn<>("Data");
-                dataCol.setCellValueFactory(cellData -> cellData.getValue().dataProperty());
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                dataCol.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().dataOraProperty().get().format(formatter)));
 
                 TableColumn<Movimento, String> articoloCol = new TableColumn<>("Articolo");
                 articoloCol.setCellValueFactory(cellData -> cellData.getValue().articoloProperty());
@@ -293,6 +297,7 @@ public class MagazzinoApp extends Application {
     }
 
     private void leggiMovimentiCSV(String filePath) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
             br.readLine(); // Salta l'intestazione
@@ -302,15 +307,15 @@ public class MagazzinoApp extends Application {
                     System.err.println("Formato riga CSV non valido: " + line);
                     continue;
                 }
-                String data = parts[0];
+                LocalDateTime dataOra = LocalDateTime.parse(parts[0], formatter);
                 String articolo = parts[1];
                 int quantita = Integer.parseInt(parts[2].trim());
                 double costo = Double.parseDouble(parts[3].trim());
                 String tipo = parts[4];
 
-                movimenti.add(new Movimento(data, articolo, quantita, costo, tipo));
-                // Ordina i movimenti per data in ordine discendente
-                movimenti.sort(Comparator.comparing((Movimento m) -> m.dataProperty().get()).reversed());
+                movimenti.add(new Movimento(dataOra, articolo, quantita, costo, tipo));
+                // Ordina i movimenti per data e ora
+                movimenti.sort(Comparator.comparing((Movimento m) -> m.dataOraProperty().get()).reversed());
             }
         } catch (IOException e) {
             System.err.println("Errore durante la lettura del file CSV: " + e.getMessage());
@@ -318,14 +323,15 @@ public class MagazzinoApp extends Application {
     }
     
     private void registraMovimento(String data, String articolo, int quantita, double costo, String tipo) {
+        LocalDateTime oraCorrente = LocalDateTime.now();
         // Aggiunge il movimento alla lista
-        movimenti.add(new Movimento(data, articolo, quantita, costo, tipo));
+        movimenti.add(new Movimento(oraCorrente, articolo, quantita, costo, tipo));
         // Ordina nuovamente dopo l'inserimento
-        movimenti.sort(Comparator.comparing((Movimento m) -> m.dataProperty().get()).reversed());
+        movimenti.sort(Comparator.comparing((Movimento m) -> m.dataOraProperty().get()).reversed());
     
         // Scrive tutti i movimenti nel file, inclusa la nuova riga
         try (BufferedWriter writer = new BufferedWriter(new FileWriter("movimenti.csv", true))) {
-            writer.write(data + ";" + articolo + ";" + quantita + ";" + costo + ";" + tipo);
+            writer.write(oraCorrente.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + ";" + articolo + ";" + quantita + ";" + costo + ";" + tipo);
             writer.newLine();
             System.out.println("Movimento registrato con successo.");
         } catch (IOException e) {

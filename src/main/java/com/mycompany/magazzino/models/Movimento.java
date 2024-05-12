@@ -1,16 +1,17 @@
 package com.mycompany.magazzino.models;
 
+import java.time.LocalDateTime;
 import javafx.beans.property.*;
 
 public class Movimento {
-    private StringProperty data;
+    private ObjectProperty<LocalDateTime> dataOra;
     private StringProperty articolo;
     private IntegerProperty quantita;
     private DoubleProperty costo;
     private StringProperty tipo;
 
-    public Movimento(String data, String articolo, int quantita, double costo, String tipo) {
-        this.data = new SimpleStringProperty(data);
+    public Movimento(LocalDateTime dataOra, String articolo, int quantita, double costo, String tipo) {
+        this.dataOra = new SimpleObjectProperty<>(dataOra);
         this.articolo = new SimpleStringProperty(articolo);
         this.quantita = new SimpleIntegerProperty(quantita);
         this.costo = new SimpleDoubleProperty(costo);
@@ -18,8 +19,8 @@ public class Movimento {
     }
 
     // Getters and setters
-    public StringProperty dataProperty() {
-        return data;
+    public ObjectProperty<LocalDateTime> dataOraProperty() {
+        return dataOra;
     }
 
     public StringProperty articoloProperty() {
