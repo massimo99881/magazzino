@@ -1,6 +1,7 @@
 package com.mycompany.magazzino;
 
 import com.mycompany.magazzino.models.Articolo;
+import com.mycompany.magazzino.models.HistoricalPrice;
 import com.mycompany.magazzino.models.Movimento;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
@@ -14,6 +15,9 @@ import java.io.BufferedWriter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -22,6 +26,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.scene.layout.HBox;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.control.cell.PropertyValueFactory;
 
 
 public class MagazzinoApp extends Application {
@@ -31,8 +36,15 @@ public class MagazzinoApp extends Application {
     private TableView<Movimento> tableViewMovimenti;
     private ObservableList<Articolo> articoli = FXCollections.observableArrayList();
     private ObservableList<Movimento> movimenti = FXCollections.observableArrayList();
+    private ObservableList<HistoricalPrice> historicalPrices = FXCollections.observableArrayList();
+
     private Articolo ultimoArticoloModificato;
     private HBox buttonsRow;
+    private TableView<HistoricalPrice> tableViewHistory;
+    private DatePicker dpStartDate;
+    private DatePicker dpEndDate;
+    private TextField tfMarketPrice;
+    private Button btnRegister;
 
 
     public static void main(String[] args) {
@@ -142,6 +154,26 @@ public class MagazzinoApp extends Application {
         primaryStage.show();
     }
 
+    private void setupHistoricalPriceTable() {
+        tableViewHistory = new TableView<>();
+
+        TableColumn<HistoricalPrice, String> columnStartDate = new TableColumn<>("Data Inizio");
+        columnStartDate.setCellValueFactory(new PropertyValueFactory<>("dataInizio"));
+
+        TableColumn<HistoricalPrice, String> columnEndDate = new TableColumn<>("Data Fine");
+        columnEndDate.setCellValueFactory(new PropertyValueFactory<>("dataFine"));
+
+        TableColumn<HistoricalPrice, Integer> columnStock = new TableColumn<>("Quantità Giacenza");
+        columnStock.setCellValueFactory(new PropertyValueFactory<>("qtaGiacenza"));
+
+        TableColumn<HistoricalPrice, Double> columnHistoricValue = new TableColumn<>("Valore Storico");
+        columnHistoricValue.setCellValueFactory(new PropertyValueFactory<>("valoreStorico"));
+
+        TableColumn<HistoricalPrice, Double> columnMarketValue = new TableColumn<>("Valore Mercato");
+        columnMarketValue.setCellValueFactory(new PropertyValueFactory<>("valoreMercato"));
+
+        tableViewHistory.getColumns().addAll(columnStartDate, columnEndDate, columnStock, columnHistoricValue, columnMarketValue);
+    }
     private void leggiDatiCSV(String filePath) {
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
@@ -227,8 +259,11 @@ public class MagazzinoApp extends Application {
                 break;
                 
             case "Valorizza":
-                titolo.setText("Valorizza");
-                // Aggiungi qui il contenuto specifico per l'azione "Valorizza"
+                if(!checkRowSelected()) return;
+                Articolo articoloSelezionatoPerValorizza = tableViewMagazzino.getSelectionModel().getSelectedItem();
+                
+                setupValorizzaSection(contenuto, articoloSelezionatoPerValorizza);
+                
                 break;
             case "Magazzino":
                 titolo.setText("Articoli in magazzino");
@@ -245,6 +280,48 @@ public class MagazzinoApp extends Application {
         ((VBox) primaryStage.getScene().getRoot()).getChildren().set(0, contenuto);
     }
 
+    
+
+    private void setupHistoryTable() {
+        TableColumn<HistoricalPrice, String> columnStartDate = new TableColumn<>("Data Inizio");
+        columnStartDate.setCellValueFactory(new PropertyValueFactory<>("dataInizio"));
+
+        TableColumn<HistoricalPrice, String> columnEndDate = new TableColumn<>("Data Fine");
+        columnEndDate.setCellValueFactory(new PropertyValueFactory<>("dataFine"));
+
+        TableColumn<HistoricalPrice, Integer> columnStock = new TableColumn<>("Quantità Giacenza");
+        columnStock.setCellValueFactory(new PropertyValueFactory<>("qtaGiacenza"));
+
+        TableColumn<HistoricalPrice, Double> columnHistoricValue = new TableColumn<>("Valore Storico");
+        columnHistoricValue.setCellValueFactory(new PropertyValueFactory<>("valoreStorico"));
+
+        TableColumn<HistoricalPrice, Double> columnMarketValue = new TableColumn<>("Valore Mercato");
+        columnMarketValue.setCellValueFactory(new PropertyValueFactory<>("valoreMercato"));
+
+        tableViewHistory.getColumns().addAll(columnStartDate, columnEndDate, columnStock, columnHistoricValue, columnMarketValue);
+    }
+
+    
+
+    private void addRecordToCsv(String code, String startDate, String endDate, int stock, double historicValue, double marketPrice) {
+        // File CSV di destinazione
+        String filePath = "storico.csv";
+
+        try (FileWriter fw = new FileWriter(filePath, true);
+             BufferedWriter bw = new BufferedWriter(fw);
+             PrintWriter out = new PrintWriter(bw)) {
+            // Componi la linea da aggiungere
+            String line = String.format("%s,%s,%s,%d,%.2f,%.2f",
+                                        code, startDate, endDate, stock, historicValue, marketPrice);
+
+            // Scrivi la linea nel file CSV
+            out.println(line);
+            System.out.println("Record aggiunto con successo al file CSV: " + filePath);
+        } catch (IOException e) {
+            System.err.println("Errore durante la scrittura nel file CSV: " + e.getMessage());
+        }
+    }
+    
     private void gestisciPerditaArticoli(String motivo, String numArticoliPersiText) {
         if (motivo == null || numArticoliPersiText.isEmpty()) {
             showAlert(Alert.AlertType.WARNING, "Errore", "Devi selezionare un motivo e inserire il numero di articoli persi.");
@@ -428,4 +505,117 @@ public class MagazzinoApp extends Application {
         }
         return null; // o gestire il caso di non trovato
     }
+
+    private void loadHistoricalPrices(String codiceArticolo) {
+        String filePath = "storico.csv";
+        historicalPrices.clear();  // Pulisci la lista precedente
+
+        try (BufferedReader br = Files.newBufferedReader(Paths.get(filePath))) {
+            // Salta la prima riga (intestazioni del CSV)
+            String line = br.readLine();
+
+            while ((line = br.readLine()) != null) {
+                String[] data = line.split(",");
+                if (data[0].trim().equals(codiceArticolo)) {
+                    // Crea un nuovo oggetto HistoricalPrice se il codice articolo corrisponde
+                    HistoricalPrice price = new HistoricalPrice(
+                        data[0].trim(), // codiceArticolo
+                        data[1].trim(), // dataInizio
+                        data[2].trim(), // dataFine
+                        Integer.parseInt(data[3].trim()), // qtaGiacenza
+                        Double.parseDouble(data[4].trim()), // valoreStorico
+                        Double.parseDouble(data[5].trim())  // valoreMercato
+                    );
+                    historicalPrices.add(price);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Errore durante la lettura del file " + filePath + ": " + e.getMessage());
+        }
+    }
+    
+    private void setupValorizzaSection(VBox contenuto, Articolo articoloSelezionatoPerValorizza) {
+    contenuto.getChildren().clear();
+
+    Label titolo = new Label("Valorizza Articolo: " + articoloSelezionatoPerValorizza.getCodice() + " - " + articoloSelezionatoPerValorizza.getDescrizione());
+    titolo.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+
+    // Configura e carica la tabella dello storico dei prezzi
+    setupHistoricalPriceTable();
+    loadHistoricalPrices(articoloSelezionatoPerValorizza.getCodice());
+    tableViewHistory.setItems(historicalPrices);  // Assicurati che i dati siano impostati
+
+    // Verifica che la tabella abbia dati da mostrare
+    if (historicalPrices.isEmpty()) {
+        contenuto.getChildren().add(new Label("Nessun dato storico disponibile per questo articolo."));
+    } else {
+        contenuto.getChildren().add(tableViewHistory); // Aggiungi la tabella se ci sono dati
+    }
+
+    // Setup dei DatePicker e altri controlli
+    HBox datePickers = new HBox(10);
+    dpStartDate = new DatePicker();
+    dpEndDate = new DatePicker();
+    datePickers.getChildren().addAll(new Label("Data Inizio:"), dpStartDate, new Label("Data Fine:"), dpEndDate);
+
+    TextField tfMarketPrice = new TextField();
+    tfMarketPrice.setPromptText("Inserisci il prezzo di mercato");
+
+    Button btnRegister = new Button("Registra");
+    btnRegister.setOnAction(e -> {
+        registerMarketPrice(articoloSelezionatoPerValorizza.getCodice(), dpStartDate.getValue(), dpEndDate.getValue(), Double.parseDouble(tfMarketPrice.getText()));
+    });
+
+    // Aggiunta dei componenti al layout
+    contenuto.getChildren().addAll(titolo, datePickers, new Label("Prezzo di Mercato:"), tfMarketPrice, btnRegister);
+}
+    
+    /**
+    * Registra il nuovo prezzo di mercato per l'articolo selezionato nel periodo specificato.
+    * @param codiceArticolo Codice dell'articolo selezionato.
+    * @param startDate Data di inizio del periodo.
+    * @param endDate Data di fine del periodo.
+    * @param marketPrice Nuovo prezzo di mercato inserito dall'utente.
+    */
+   private void registerMarketPrice(String codiceArticolo, LocalDate startDate, LocalDate endDate, double marketPrice) {
+       // Controllo delle date: startDate non deve essere dopo endDate
+       if (startDate == null || endDate == null || startDate.isAfter(endDate)) {
+           showAlert("Errore Data", "La data di inizio deve essere precedente o uguale alla data di fine.");
+           return;
+       }
+
+       // Controllo del prezzo di mercato: deve essere un valore positivo
+       if (marketPrice <= 0) {
+           showAlert("Errore Prezzo", "Il prezzo di mercato deve essere un valore positivo.");
+           return;
+       }
+
+       // Converti le date in stringhe nel formato desiderato
+       String formattedStartDate = startDate.toString();
+       String formattedEndDate = endDate.toString();
+
+       // Valori fittizi per la quantità di giacenza e il valore storico, che potrebbero essere calcolati o inseriti dall'utente
+       int stock = 0;  // Esempio: questo valore potrebbe essere ricavato da altri dati o da un input dell'utente
+       double historicValue = 0;  // Esempio: potrebbe essere calcolato basandosi su altre metriche
+
+       // Aggiungi il record al CSV
+       addRecordToCsv(codiceArticolo, formattedStartDate, formattedEndDate, stock, historicValue, marketPrice);
+
+       // Notifica all'utente che l'operazione è stata completata
+       showAlert("Successo", "Il nuovo prezzo di mercato è stato registrato correttamente.");
+   }
+
+   /**
+    * Mostra un alert con un messaggio di errore o di conferma.
+    * @param title Titolo dell'alert.
+    * @param content Contenuto del messaggio.
+    */
+   private void showAlert(String title, String content) {
+       Alert alert = new Alert(Alert.AlertType.INFORMATION);
+       alert.setTitle(title);
+       alert.setHeaderText(null);
+       alert.setContentText(content);
+       alert.showAndWait();
+   }
+
 }
